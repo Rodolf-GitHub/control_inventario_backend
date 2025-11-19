@@ -6,8 +6,9 @@ from compra.schemas import (
     DetalleCompraInSchema,
     DetalleCompraUpdateSchema,
     CompraWithDetailsSchema,
-    CompraUpdateSchema
+    CompraUpdateSchema,
 )
+from core.schemas import ErrorSchema
 from compra.models import Compra, DetalleCompra
 from proveedor.models import Proveedor
 from producto.models import Producto
@@ -38,7 +39,7 @@ def _compra_to_dict(compra: Compra, detalles_list: list[DetalleCompra]) -> dict:
         "detalles": [_detalle_to_dict(d) for d in detalles_list],
     }
 
-@compra_router.get("/rango/{proveedor_id}/", response=list[CompraWithDetailsSchema])
+@compra_router.get("/rango/{proveedor_id}/", response={200: list[CompraWithDetailsSchema], 400: ErrorSchema, 404: ErrorSchema})
 def compras_por_rango(
     request,
     proveedor_id: int,
@@ -55,7 +56,7 @@ def compras_por_rango(
     """
     # Validar que el proveedor exista
     if not Proveedor.objects.filter(id=proveedor_id).exists():
-        raise HttpError(404, "Proveedor no encontrado")
+        return 404, {"message": "Proveedor no encontrado"}
 
     # Filtrar por proveedor recibido en la ruta
     qs = Compra.objects.filter(proveedor__id=proveedor_id)
@@ -73,12 +74,12 @@ def compras_por_rango(
 
 
 
-@compra_router.post("/crear/", response=CompraWithDetailsSchema)
+@compra_router.post("/crear/", response={200: CompraWithDetailsSchema, 400: ErrorSchema})
 def crear_compra(request, compra_in: CompraInSchema):
     """Crea una nueva compra y genera un detalle por cada producto del proveedor con valores en 0."""
     # Validación: no permitir más de una compra en la misma fecha para el mismo proveedor
     if Compra.objects.filter(proveedor_id=compra_in.proveedor_id, fecha_compra=compra_in.fecha_compra).exists():
-        raise HttpError(400, "Ya existe una compra para este proveedor en la fecha indicada.")
+        return 400, {"message": "Ya existe una compra para este proveedor en la fecha indicada."}
 
     compra = Compra.objects.create(**compra_in.dict())
 
@@ -104,7 +105,7 @@ def crear_compra(request, compra_in: CompraInSchema):
     )
     return compra_con_detalles
 
-@compra_router.post("/detalle/crear/{compra_id}/", response=DetalleCompraSchema)
+@compra_router.post("/detalle/crear/{compra_id}/", response={200: DetalleCompraSchema, 400: ErrorSchema})
 def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
     """Crea un nuevo detalle de compra para una compra existente."""
     compra = Compra.objects.get(id=compra_id)
@@ -118,7 +119,7 @@ def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
     return DetalleCompra.objects.select_related("producto").get(id=detalle.id)
 
 
-@compra_router.patch("/detalle/editar/{detalle_id}/", response=DetalleCompraSchema)
+@compra_router.patch("/detalle/editar/{detalle_id}/", response={200: DetalleCompraSchema, 400: ErrorSchema})
 def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSchema):
     """Edita un detalle de compra existente."""
     detalle = DetalleCompra.objects.select_related("producto").get(id=detalle_id)

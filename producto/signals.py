@@ -11,7 +11,8 @@ def crear_detalle_en_compras(sender, instance, created, **kwargs):
     if not created:
         return
 
-    compras = Compra.objects.all()
+    # sólo considerar compras del mismo proveedor del producto
+    compras = Compra.objects.filter(proveedor_id=instance.proveedor_id)
     detalles_to_create = []
     for compra in compras:
         # evitar duplicados

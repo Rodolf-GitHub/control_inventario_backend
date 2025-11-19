@@ -7,6 +7,9 @@ class Producto(models.Model):
 
     class Meta:
         db_table = 'producto'
+        constraints = [
+            models.UniqueConstraint(fields=["proveedor", "nombre"], name="unique_producto_por_proveedor"),
+        ]
 
     def __str__(self):
         return self.nombre

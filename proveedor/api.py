@@ -1,6 +1,7 @@
 from ninja import Router
 from proveedor.models import Proveedor
 from proveedor.schemas import ProveedorSchema, ProveedorInSchema, ProveedorUpdateSchema
+from core.schemas import ErrorSchema
 from tienda.models import Tienda
 from ninja.errors import HttpError
 
@@ -13,7 +14,7 @@ def listar_proveedores(request, tienda_id: int):
     proveedores = Proveedor.objects.filter(tienda_id=tienda_id)
     return proveedores
 
-@proveedor_router.post("/crear/", response=ProveedorSchema)
+@proveedor_router.post("/crear/", response={200: ProveedorSchema, 400: ErrorSchema})
 def crear_proveedor(request, proveedor_in: ProveedorInSchema):
     """
     Crea un nuevo proveedor asociado a una tienda.
@@ -21,7 +22,7 @@ def crear_proveedor(request, proveedor_in: ProveedorInSchema):
     tienda = Tienda.objects.get(id=proveedor_in.tienda_id)
     # Validación: nombre de proveedor único por tienda
     if Proveedor.objects.filter(tienda_id=proveedor_in.tienda_id, nombre=proveedor_in.nombre).exists():
-        raise HttpError(400, "Ya existe un proveedor con ese nombre en la tienda indicada.")
+        return 400, {"message": "Ya existe un proveedor con ese nombre en la tienda indicada."}
 
     proveedor = Proveedor.objects.create(
         nombre=proveedor_in.nombre,

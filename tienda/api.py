@@ -1,6 +1,7 @@
 from ninja import Router
 from tienda.models import Tienda
 from tienda.schemas import TiendaSchema, TiendaInSchema
+from core.schemas import ErrorSchema
 from ninja.errors import HttpError
 
 tienda_router = Router(tags=["Tiendas"])
@@ -12,14 +13,14 @@ def listar_tiendas(request):
     """
     tiendas = Tienda.objects.all()
     return tiendas
-@tienda_router.post("/crear/", response=TiendaSchema)
+@tienda_router.post("/crear/", response={200: TiendaSchema, 400: ErrorSchema})
 def crear_tienda(request, tienda_in: TiendaInSchema):
     """
     Crea una nueva tienda.
     """
     # Validación: nombre único de tienda
     if Tienda.objects.filter(nombre=tienda_in.nombre).exists():
-        raise HttpError(400, "Ya existe una tienda con ese nombre.")
+        return 400, {"message": "Ya existe una tienda con ese nombre."}
     tienda = Tienda.objects.create(**tienda_in.dict())
     return tienda
 @tienda_router.patch("/actualizar/{tienda_id}/", response=TiendaSchema)
