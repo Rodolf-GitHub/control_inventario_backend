@@ -14,7 +14,30 @@ from typing import Optional
 
 compra_router = Router(tags=["Compras"])
 
+@compra_router.get("/rango/", response=list[CompraWithDetailsSchema])
+def compras_por_rango(
+    request,
+    fecha_inicio: Optional[date] = None,
+    fecha_fin: Optional[date] = None,
+    limit: int = 3,
+):
+    """Devuelve hasta `limit` compras con detalles.
 
+    - Si no se pasa `fecha_inicio` ni `fecha_fin`, devuelve las últimas `limit` compras.
+    - Si se pasa un rango (`fecha_inicio` y `fecha_fin`), devuelve las últimas `limit` compras dentro de ese rango.
+    """
+    qs = Compra.objects.all()
+    if fecha_inicio and fecha_fin:
+        qs = qs.filter(fecha_compra__range=(fecha_inicio, fecha_fin))
+
+    compras = qs.order_by("-fecha_compra")[:limit]
+    resultado = []
+    for compra in compras:
+        detalles = DetalleCompra.objects.filter(compra=compra)
+        compra_data = CompraWithDetailsSchema.from_orm(compra)
+        compra_data.detalles = [DetalleCompraSchema.from_orm(d) for d in detalles]
+        resultado.append(compra_data)
+    return resultado
 
 
 
@@ -51,30 +74,7 @@ def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSche
     return detalle
 
 
-@compra_router.get("/rango/", response=list[CompraWithDetailsSchema])
-def compras_por_rango(
-    request,
-    fecha_inicio: Optional[date] = None,
-    fecha_fin: Optional[date] = None,
-    limit: int = 3,
-):
-    """Devuelve hasta `limit` compras con detalles.
 
-    - Si no se pasa `fecha_inicio` ni `fecha_fin`, devuelve las últimas `limit` compras.
-    - Si se pasa un rango (`fecha_inicio` y `fecha_fin`), devuelve las últimas `limit` compras dentro de ese rango.
-    """
-    qs = Compra.objects.all()
-    if fecha_inicio and fecha_fin:
-        qs = qs.filter(fecha_compra__range=(fecha_inicio, fecha_fin))
-
-    compras = qs.order_by("-fecha_compra")[:limit]
-    resultado = []
-    for compra in compras:
-        detalles = DetalleCompra.objects.filter(compra=compra)
-        compra_data = CompraWithDetailsSchema.from_orm(compra)
-        compra_data.detalles = [DetalleCompraSchema.from_orm(d) for d in detalles]
-        resultado.append(compra_data)
-    return resultado
 
 
 @compra_router.delete("/eliminar/{compra_id}/")

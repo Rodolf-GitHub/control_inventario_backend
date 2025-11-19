@@ -1,5 +1,5 @@
 from ninja import Router
-from producto.schemas import ProductoSchema, ProductoInSchema
+from producto.schemas import ProductoSchema, ProductoInSchema, ProductoUpdateSchema
 from producto.models import Producto
 
 producto_router = Router(tags=["Productos"])
@@ -21,15 +21,13 @@ def crear_producto(request, producto_in: ProductoInSchema):
     )
     return producto
 @producto_router.patch("/actualizar/{producto_id}/", response=ProductoSchema)
-def actualizar_producto(request, producto_id: int, producto_in: ProductoInSchema):
+def actualizar_producto(request, producto_id: int, producto_in: ProductoUpdateSchema):
     """
     Actualiza un producto existente.
     """
     producto = Producto.objects.get(id=producto_id)
     if producto_in.nombre:
         producto.nombre = producto_in.nombre
-    if producto_in.proveedor_id:
-        producto.proveedor_id = producto_in.proveedor_id
     producto.save()
     return producto
 @producto_router.delete("/eliminar/{producto_id}/")

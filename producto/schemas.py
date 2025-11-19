@@ -9,3 +9,7 @@ class ProductoSchema(ModelSchema):
 class ProductoInSchema(Schema):
     nombre: str
     proveedor_id: int
+
+class ProductoUpdateSchema(Schema):
+    nombre: str
+    

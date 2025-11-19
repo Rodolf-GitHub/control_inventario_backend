@@ -1,6 +1,6 @@
 from ninja import Router
 from proveedor.models import Proveedor
-from proveedor.schemas import ProveedorSchema, ProveedorInSchema
+from proveedor.schemas import ProveedorSchema, ProveedorInSchema, ProveedorUpdateSchema
 from tienda.models import Tienda
 
 proveedor_router = Router(tags=["Proveedores"])
@@ -25,16 +25,13 @@ def crear_proveedor(request, proveedor_in: ProveedorInSchema):
     return proveedor
 
 @proveedor_router.patch("/actualizar/{proveedor_id}/", response=ProveedorSchema)
-def actualizar_proveedor(request, proveedor_id: int, proveedor_in: ProveedorInSchema):
+def actualizar_proveedor(request, proveedor_id: int, proveedor_in: ProveedorUpdateSchema):
     """
     Actualiza un proveedor existente.
     """
     proveedor = Proveedor.objects.get(id=proveedor_id)
     if proveedor_in.nombre:
         proveedor.nombre = proveedor_in.nombre
-    if proveedor_in.tienda_id:
-        tienda = Tienda.objects.get(id=proveedor_in.tienda_id)
-        proveedor.tienda = tienda
     proveedor.save()
     return proveedor
 

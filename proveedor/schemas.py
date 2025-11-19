@@ -9,3 +9,6 @@ class ProveedorSchema(ModelSchema):
 class ProveedorInSchema(Schema):
     nombre: str
     tienda_id: int
+
+class ProveedorUpdateSchema(Schema):
+    nombre: str
