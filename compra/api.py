@@ -10,7 +10,7 @@ from compra.schemas import (
 )
 from compra.models import Compra, DetalleCompra
 from producto.models import Producto
-from django.db.models import Sum
+from django.db.models import Sum, Prefetch
 from datetime import date
 from typing import Optional
 
@@ -42,22 +42,26 @@ def compras_por_rango(
     fecha_inicio: Optional[date] = None,
     fecha_fin: Optional[date] = None,
     limit: int = 3,
+    order: str = "asc",
 ):
     """Devuelve hasta `limit` compras con detalles.
 
     - Si no se pasa `fecha_inicio` ni `fecha_fin`, devuelve las últimas `limit` compras.
     - Si se pasa un rango (`fecha_inicio` y `fecha_fin`), devuelve las últimas `limit` compras dentro de ese rango.
+    - Parámetro `order`: `asc` para ascendente (fecha antigua->nueva), `desc` para descendente (por defecto).
     """
     qs = Compra.objects.all()
     if fecha_inicio and fecha_fin:
         qs = qs.filter(fecha_compra__range=(fecha_inicio, fecha_fin))
 
-    compras = qs.order_by("-fecha_compra")[:limit]
-    resultado = []
-    for compra in compras:
-        detalles = list(DetalleCompra.objects.filter(compra=compra))
-        resultado.append(_compra_to_dict(compra, detalles))
-    return resultado
+    # Prefetch detalles con su producto para que el ModelSchema pueda resolver producto.nombre
+    qs = qs.prefetch_related(
+        Prefetch("detalles", queryset=DetalleCompra.objects.select_related("producto"))
+    )
+
+    ordering = "fecha_compra" if (str(order).lower() != "desc") else "-fecha_compra"
+    compras = list(qs.order_by(ordering)[:limit])
+    return compras
 
 
 
@@ -87,7 +91,13 @@ def crear_compra(request, compra_in: CompraInSchema):
         )
         detalles_creados.append(detalle)
 
-    return _compra_to_dict(compra, detalles_creados)
+    # Devolver la instancia ORM con los detalles precargados para que el schema pueda resolver nombres
+    compra_con_detalles = (
+        Compra.objects.prefetch_related(
+            Prefetch("detalles", queryset=DetalleCompra.objects.select_related("producto"))
+        ).get(id=compra.id)
+    )
+    return compra_con_detalles
 
 @compra_router.post("/detalle/crear/{compra_id}/", response=DetalleCompraSchema)
 def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
@@ -100,18 +110,18 @@ def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
         cantidad=detalle_in.cantidad,
         inventario_anterior=detalle_in.inventario_anterior,
     )
-    return _detalle_to_dict(detalle)
+    return DetalleCompra.objects.select_related("producto").get(id=detalle.id)
 
 
 @compra_router.patch("/detalle/editar/{detalle_id}/", response=DetalleCompraSchema)
 def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSchema):
     """Edita un detalle de compra existente."""
-    detalle = DetalleCompra.objects.get(id=detalle_id)
+    detalle = DetalleCompra.objects.select_related("producto").get(id=detalle_id)
     # Actualizar solo los campos permitidos
     detalle.cantidad = detalle_in.cantidad
     detalle.inventario_anterior = detalle_in.inventario_anterior
     detalle.save()
-    return _detalle_to_dict(detalle)
+    return DetalleCompra.objects.select_related("producto").get(id=detalle.id)
 
 @compra_router.patch("/compra//{compra}/", response=CompraSchema)
 def actualizar_compra(request, compra: int, compra_in: CompraUpdateSchema):
