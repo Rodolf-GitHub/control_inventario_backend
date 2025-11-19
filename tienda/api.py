@@ -1,6 +1,7 @@
 from ninja import Router
 from tienda.models import Tienda
 from tienda.schemas import TiendaSchema, TiendaInSchema
+from ninja.errors import HttpError
 
 tienda_router = Router(tags=["Tiendas"])
 
@@ -16,6 +17,9 @@ def crear_tienda(request, tienda_in: TiendaInSchema):
     """
     Crea una nueva tienda.
     """
+    # Validación: nombre único de tienda
+    if Tienda.objects.filter(nombre=tienda_in.nombre).exists():
+        raise HttpError(400, "Ya existe una tienda con ese nombre.")
     tienda = Tienda.objects.create(**tienda_in.dict())
     return tienda
 @tienda_router.patch("/actualizar/{tienda_id}/", response=TiendaSchema)

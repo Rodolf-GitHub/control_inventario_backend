@@ -13,6 +13,7 @@ from producto.models import Producto
 from django.db.models import Sum, Prefetch
 from datetime import date
 from typing import Optional
+from ninja.errors import HttpError
 
 compra_router = Router(tags=["Compras"])
 
@@ -70,6 +71,10 @@ def compras_por_rango(
 @compra_router.post("/crear/", response=CompraWithDetailsSchema)
 def crear_compra(request, compra_in: CompraInSchema):
     """Crea una nueva compra y genera un detalle por cada producto del proveedor con valores en 0."""
+    # Validación: no permitir más de una compra en la misma fecha para el mismo proveedor
+    if Compra.objects.filter(proveedor_id=compra_in.proveedor_id, fecha_compra=compra_in.fecha_compra).exists():
+        raise HttpError(400, "Ya existe una compra para este proveedor en la fecha indicada.")
+
     compra = Compra.objects.create(**compra_in.dict())
 
     # Obtener todos los productos del proveedor y crear detalles con valores por defecto 0
