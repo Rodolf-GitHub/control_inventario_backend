@@ -70,24 +70,16 @@ def crear_compra(request, compra_in: CompraInSchema):
     """Crea una nueva compra y genera un detalle por cada producto del proveedor con valores en 0."""
     compra = Compra.objects.create(**compra_in.dict())
 
-    # Obtener todos los productos del proveedor y crear detalles.
-    # Calculamos el inventario anterior actual como la suma de cantidades existentes
-    # y asignamos por defecto el inventario resultante = previo + cantidad_de_compra (actualmente 0).
+    # Obtener todos los productos del proveedor y crear detalles con valores por defecto 0
     productos = Producto.objects.filter(proveedor_id=compra.proveedor_id)
     detalles_creados = []
     for producto in productos:
-        prev = (
-            DetalleCompra.objects.filter(producto=producto)
-            .aggregate(total=Sum('cantidad'))
-            .get('total')
-        ) or 0
         cantidad_compra = 0
-        inventario_resultante = prev + cantidad_compra
         detalle = DetalleCompra.objects.create(
             compra=compra,
             producto=producto,
             cantidad=cantidad_compra,
-            inventario_anterior=inventario_resultante,
+            inventario_anterior=0,
         )
         detalles_creados.append(detalle)
 
