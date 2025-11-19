@@ -15,6 +15,26 @@ from typing import Optional
 
 compra_router = Router(tags=["Compras"])
 
+
+def _detalle_to_dict(detalle: DetalleCompra) -> dict:
+    return {
+        "id": detalle.id,
+        "compra_id": detalle.compra_id,
+        "producto_id": detalle.producto_id,
+        "cantidad": detalle.cantidad,
+        "inventario_anterior": detalle.inventario_anterior,
+        "producto_nombre": detalle.producto.nombre if detalle.producto else None,
+    }
+
+
+def _compra_to_dict(compra: Compra, detalles_list: list[DetalleCompra]) -> dict:
+    return {
+        "id": compra.id,
+        "proveedor_id": compra.proveedor_id,
+        "fecha_compra": compra.fecha_compra,
+        "detalles": [_detalle_to_dict(d) for d in detalles_list],
+    }
+
 @compra_router.get("/rango/", response=list[CompraWithDetailsSchema])
 def compras_por_rango(
     request,
@@ -34,10 +54,8 @@ def compras_por_rango(
     compras = qs.order_by("-fecha_compra")[:limit]
     resultado = []
     for compra in compras:
-        detalles = DetalleCompra.objects.filter(compra=compra)
-        compra_data = CompraWithDetailsSchema.from_orm(compra)
-        compra_data.detalles = [DetalleCompraSchema.from_orm(d) for d in detalles]
-        resultado.append(compra_data)
+        detalles = list(DetalleCompra.objects.filter(compra=compra))
+        resultado.append(_compra_to_dict(compra, detalles))
     return resultado
 
 
@@ -68,9 +86,7 @@ def crear_compra(request, compra_in: CompraInSchema):
         )
         detalles_creados.append(detalle)
 
-    compra_data = CompraWithDetailsSchema.from_orm(compra)
-    compra_data.detalles = [DetalleCompraSchema.from_orm(d) for d in detalles_creados]
-    return compra_data
+    return _compra_to_dict(compra, detalles_creados)
 
 
 @compra_router.patch("/detalle/editar/{detalle_id}/", response=DetalleCompraSchema)
@@ -81,7 +97,7 @@ def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSche
     detalle.cantidad = detalle_in.cantidad
     detalle.inventario_anterior = detalle_in.inventario_anterior
     detalle.save()
-    return detalle
+    return _detalle_to_dict(detalle)
 
 
 
