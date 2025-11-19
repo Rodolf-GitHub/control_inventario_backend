@@ -9,6 +9,7 @@ from compra.schemas import (
     CompraUpdateSchema
 )
 from compra.models import Compra, DetalleCompra
+from proveedor.models import Proveedor
 from producto.models import Producto
 from django.db.models import Sum, Prefetch
 from datetime import date
@@ -52,8 +53,12 @@ def compras_por_rango(
     - Si se pasa un rango (`fecha_inicio` y `fecha_fin`), devuelve las últimas `limit` compras dentro de ese rango.
     - Parámetro `order`: `asc` para ascendente (fecha antigua->nueva), `desc` para descendente (por defecto).
     """
+    # Validar que el proveedor exista
+    if not Proveedor.objects.filter(id=proveedor_id).exists():
+        raise HttpError(404, "Proveedor no encontrado")
+
     # Filtrar por proveedor recibido en la ruta
-    qs = Compra.objects.filter(proveedor_id=proveedor_id)
+    qs = Compra.objects.filter(proveedor__id=proveedor_id)
     if fecha_inicio and fecha_fin:
         qs = qs.filter(fecha_compra__range=(fecha_inicio, fecha_fin))
 
@@ -77,8 +82,9 @@ def crear_compra(request, compra_in: CompraInSchema):
 
     compra = Compra.objects.create(**compra_in.dict())
 
-    # Obtener todos los productos del proveedor y crear detalles con valores por defecto 0
-    productos = Producto.objects.filter(proveedor_id=compra.proveedor_id)
+    # Obtener el proveedor de la compra y filtrar productos por esa instancia
+    proveedor_obj = compra.proveedor
+    productos = Producto.objects.filter(proveedor=proveedor_obj)
     detalles_creados = []
     for producto in productos:
         cantidad_compra = 0
