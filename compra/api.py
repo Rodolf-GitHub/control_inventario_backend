@@ -36,9 +36,10 @@ def _compra_to_dict(compra: Compra, detalles_list: list[DetalleCompra]) -> dict:
         "detalles": [_detalle_to_dict(d) for d in detalles_list],
     }
 
-@compra_router.get("/rango/", response=list[CompraWithDetailsSchema])
+@compra_router.get("/rango/{proveedor_id}/", response=list[CompraWithDetailsSchema])
 def compras_por_rango(
     request,
+    proveedor_id: int,
     fecha_inicio: Optional[date] = None,
     fecha_fin: Optional[date] = None,
     limit: int = 3,
@@ -50,7 +51,8 @@ def compras_por_rango(
     - Si se pasa un rango (`fecha_inicio` y `fecha_fin`), devuelve las últimas `limit` compras dentro de ese rango.
     - Parámetro `order`: `asc` para ascendente (fecha antigua->nueva), `desc` para descendente (por defecto).
     """
-    qs = Compra.objects.all()
+    # Filtrar por proveedor recibido en la ruta
+    qs = Compra.objects.filter(proveedor_id=proveedor_id)
     if fecha_inicio and fecha_fin:
         qs = qs.filter(fecha_compra__range=(fecha_inicio, fecha_fin))
 
