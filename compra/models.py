@@ -7,6 +7,9 @@ class Compra(models.Model):
     fecha_compra = models.DateField(default=timezone.now)
     class Meta:
         db_table = 'compra'
+        constraints = [
+            models.UniqueConstraint(fields=["proveedor", "fecha_compra"], name="unique_compra_proveedor_fecha"),
+        ]
 
 class DetalleCompra(models.Model):
     compra = models.ForeignKey(Compra, related_name='detalles', on_delete=models.CASCADE)
@@ -15,8 +18,7 @@ class DetalleCompra(models.Model):
     inventario_anterior = models.PositiveIntegerField()
 
     class Meta:
+        db_table = 'detalle_compra'
         constraints = [
             models.UniqueConstraint(fields=["compra", "producto"], name="unique_producto_por_compra"),
         ]
-    class Meta:
-        db_table = 'detalle_compra'

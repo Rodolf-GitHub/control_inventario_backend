@@ -6,6 +6,7 @@ from compra.schemas import (
     DetalleCompraInSchema,
     DetalleCompraUpdateSchema,
     CompraWithDetailsSchema,
+    CompraUpdateSchema
 )
 from compra.models import Compra, DetalleCompra
 from producto.models import Producto
@@ -88,6 +89,19 @@ def crear_compra(request, compra_in: CompraInSchema):
 
     return _compra_to_dict(compra, detalles_creados)
 
+@compra_router.post("/detalle/crear/{compra_id}/", response=DetalleCompraSchema)
+def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
+    """Crea un nuevo detalle de compra para una compra existente."""
+    compra = Compra.objects.get(id=compra_id)
+    producto = Producto.objects.get(id=detalle_in.producto_id)
+    detalle = DetalleCompra.objects.create(
+        compra=compra,
+        producto=producto,
+        cantidad=detalle_in.cantidad,
+        inventario_anterior=detalle_in.inventario_anterior,
+    )
+    return _detalle_to_dict(detalle)
+
 
 @compra_router.patch("/detalle/editar/{detalle_id}/", response=DetalleCompraSchema)
 def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSchema):
@@ -99,8 +113,21 @@ def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSche
     detalle.save()
     return _detalle_to_dict(detalle)
 
+@compra_router.patch("/compra//{compra}/", response=CompraSchema)
+def actualizar_compra(request, compra: int, compra_in: CompraUpdateSchema):
+    """Actualiza una compra existente."""
+    compra_obj = Compra.objects.get(id=compra)
+    if compra_in.fecha_compra:
+        compra_obj.fecha_compra = compra_in.fecha_compra
+    compra_obj.save()
+    return compra_obj
 
-
+@compra_router.delete("/detalle/eliminar/{detalle_id}/")
+def eliminar_detalle(request, detalle_id: int):
+    """Elimina un detalle de compra existente."""
+    detalle = DetalleCompra.objects.get(id=detalle_id)
+    detalle.delete()
+    return {"mensaje": "Detalle de compra eliminado correctamente."}
 
 
 @compra_router.delete("/eliminar/{compra_id}/")

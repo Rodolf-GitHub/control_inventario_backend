@@ -12,6 +12,9 @@ class CompraInSchema(Schema):
     proveedor_id: int
     fecha_compra: date
 
+class CompraUpdateSchema(Schema):
+    fecha_compra: date
+
 class DetalleCompraSchema(ModelSchema):
     producto_nombre: Optional[str] = None
     class Meta:
