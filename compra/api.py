@@ -17,6 +17,11 @@ from django.db.models import Sum, Prefetch
 from datetime import date
 from typing import Optional
 from ninja.errors import HttpError
+import logging
+
+logger = logging.getLogger(__name__)
+# Límite superior aceptable para cantidades e inventarios (evita overflow en SQLite)
+MAX_ALLOWED = 10 ** 9
 
 compra_router = Router(tags=["Compras"])
 
@@ -170,20 +175,61 @@ def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSche
         body_data = {}
 
     updated = False
-    # Si el cliente envió 'cantidad' lo aplicamos sin validaciones específicas
+
+    def _coerce_int(val, default=0):
+        # Acepta int, str numérica, float; valores vacíos o None devuelven default
+        if val is None:
+            return default
+        if isinstance(val, int):
+            return val
+        try:
+            # strings: strip and try int, then float
+            if isinstance(val, str):
+                s = val.strip()
+                if s == "":
+                    return default
+                return int(s)
+            # floats
+            if isinstance(val, float):
+                return int(val)
+            # other types fallback
+            return int(val)
+        except Exception:
+            return default
+
+    # Si el cliente envió 'cantidad' lo aplicamos coercionado
     if "cantidad" in body_data:
-        detalle.cantidad = body_data.get("cantidad")
+        raw = body_data.get("cantidad")
+        coerced = _coerce_int(raw, default=0)
+        if coerced < 0:
+            logger.warning("editar_detalle: cantidad negativa recibida (%r) para detalle_id=%s — ajustando a 0", raw, detalle_id)
+            coerced = 0
+        if coerced > MAX_ALLOWED:
+            logger.warning("editar_detalle: cantidad excesiva recibida (%r) para detalle_id=%s — limitando a %s", raw, detalle_id, MAX_ALLOWED)
+            coerced = MAX_ALLOWED
+        logger.debug("editar_detalle: coercing cantidad raw=%r -> %r for detalle_id=%s", raw, coerced, detalle_id)
+        detalle.cantidad = coerced
         updated = True
 
-    # Si el cliente envió 'inventario_anterior' lo aplicamos sin validaciones específicas
+    # Si el cliente envió 'inventario_anterior' lo aplicamos coercionado
     if "inventario_anterior" in body_data:
-        detalle.inventario_anterior = body_data.get("inventario_anterior")
+        raw = body_data.get("inventario_anterior")
+        coerced = _coerce_int(raw, default=0)
+        if coerced < 0:
+            logger.warning("editar_detalle: inventario_anterior negativo recibido (%r) para detalle_id=%s — ajustando a 0", raw, detalle_id)
+            coerced = 0
+        if coerced > MAX_ALLOWED:
+            logger.warning("editar_detalle: inventario_anterior excesivo recibido (%r) para detalle_id=%s — limitando a %s", raw, detalle_id, MAX_ALLOWED)
+            coerced = MAX_ALLOWED
+        logger.debug("editar_detalle: coercing inventario_anterior raw=%r -> %r for detalle_id=%s", raw, coerced, detalle_id)
+        detalle.inventario_anterior = coerced
         updated = True
 
     if updated:
         try:
             detalle.save()
-        except Exception:
+        except Exception as e:
+            logger.exception("Error saving DetalleCompra id=%s with data=%s: %s", detalle_id, body_data, e)
             return 400, {"message": "Error al actualizar detalle"}
     detalle_obj = DetalleCompra.objects.select_related("producto", "compra__proveedor").get(id=detalle.id)
     return _detalle_to_dict(detalle_obj, request)
