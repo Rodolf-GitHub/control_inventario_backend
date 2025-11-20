@@ -7,7 +7,7 @@ from .permisosSchema import PermisosUsuarioTiendaSchema
 class UserCreateSchema(Schema):
 	username: str
 	password: str
-	es_superusuario: bool = False
+	
 
 class ChangePasswordSchema(Schema):
     old_password: str

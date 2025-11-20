@@ -58,7 +58,7 @@ def crear_usuario(request: HttpRequest, payload: UserCreateSchema, authorization
 	usuario = Usuario(
 		username=payload.username,
 		password=make_password(payload.password),
-		es_superusuario=payload.es_superusuario,
+		es_superusuario=False,
 	)
 	usuario.save()
 
