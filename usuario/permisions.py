@@ -38,6 +38,19 @@ def has_permission(user: Usuario, tienda_id: int, perm_attr: str) -> bool:
 	return bool(getattr(permiso, perm_attr, False))
 
 
+def get_allowed_tiendas(user: Usuario) -> list | None:
+	"""Devuelve la lista de `tienda_id` a las que el `user` tiene algún permiso.
+
+	Si el usuario es superusuario devuelve `None` para indicar acceso a todas las tiendas.
+	"""
+	if not user:
+		return []
+	if getattr(user, "es_superusuario", False):
+		return None
+	rows = PermisosUsuarioTienda.objects.filter(usuario=user).values_list("tienda_id", flat=True)
+	return list(rows)
+
+
 def _extract_tienda_id(request: HttpRequest, kwargs: dict, tienda_kw: str = "tienda_id") -> int | None:
 	# 1) buscar en kwargs (ruta)
 	if tienda_kw in kwargs:
@@ -105,4 +118,23 @@ def require_manage_purchases(tienda_kw: str = "tienda_id"):
 
 def require_view_inventory(tienda_kw: str = "tienda_id"):
 	return require_permission("puede_ver_inventario_compras", tienda_kw)
+
+
+def require_superadmin():
+	def decorator(func):
+		@wraps(func)
+		def wrapper(request: HttpRequest, *args, **kwargs):
+			user = _get_user_from_request(request)
+			if not user or not getattr(user, "es_superusuario", False):
+				return 401, {"message": "Se requiere superadmin"}
+			return func(request, *args, **kwargs)
+
+		return wrapper
+
+	return decorator
+
+
+def require_edit_purchases(tienda_kw: str = "tienda_id"):
+	"""Decorador para permitir edición de compras (usa `puede_editar_compras`)."""
+	return require_permission("puede_editar_compras", tienda_kw)
 

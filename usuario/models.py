@@ -18,6 +18,7 @@ class PermisosUsuarioTienda(models.Model):
     puede_gestionar_proveedores = models.BooleanField(default=True)
     puede_gestionar_productos = models.BooleanField(default=True)
     puede_gestionar_compras = models.BooleanField(default=True)
+    puede_editar_compras = models.BooleanField(default=True)
     puede_ver_inventario_compras = models.BooleanField(default=True)
     
 

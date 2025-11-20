@@ -1,7 +1,9 @@
 from ninja import Router
+from usuario.permisions import require_manage_products, _get_user_from_request, get_allowed_tiendas
 from producto.schemas import ProductoSchema, ProductoInSchema, ProductoUpdateSchema
 from core.schemas import ErrorSchema
 from producto.models import Producto
+from proveedor.models import Proveedor
 from ninja.errors import HttpError
 from django.db import IntegrityError
 
@@ -11,9 +13,20 @@ def listar_productos(request, proveedor_id: int):
     """
     Lista todos los productos de un proveedor específico.
     """
+    # Filtrar por tiendas permitidas del usuario (GETs son públicos pero limitados por tiendas)
+    user = _get_user_from_request(request)
+    allowed = get_allowed_tiendas(user)
+    # comprobar proveedor y su tienda
+    proveedor = Proveedor.objects.filter(id=proveedor_id).first()
+    if not proveedor:
+        return []
+    tienda_id = proveedor.tienda_id
+    if allowed is not None and tienda_id not in allowed:
+        return []
     productos = Producto.objects.filter(proveedor_id=proveedor_id)
     return productos
 @producto_router.post("/crear/", response={200: ProductoSchema, 400: ErrorSchema})
+@require_manage_products()
 def crear_producto(request, producto_in: ProductoInSchema):
     """
     Crea un nuevo producto asociado a un proveedor.
@@ -30,6 +43,7 @@ def crear_producto(request, producto_in: ProductoInSchema):
         return 400, {"message": "Ya existe un producto con ese nombre para este proveedor (constraint)."}
     return producto
 @producto_router.patch("/actualizar/{producto_id}/", response={200: ProductoSchema, 400: ErrorSchema})
+@require_manage_products()
 def actualizar_producto(request, producto_id: int, producto_in: ProductoUpdateSchema):
     """
     Actualiza un producto existente.
@@ -43,6 +57,7 @@ def actualizar_producto(request, producto_id: int, producto_in: ProductoUpdateSc
     producto.save()
     return producto
 @producto_router.delete("/eliminar/{producto_id}/")
+@require_manage_products()
 def eliminar_producto(request, producto_id: int):
     """
     Elimina un producto existente.

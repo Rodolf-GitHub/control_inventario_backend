@@ -14,7 +14,7 @@ from usuario.schemas.usuarios_loginSchema import (
 )
 from core.schemas import ErrorSchema
 
-usuario_router = Router()
+usuario_router = Router(tags=["Usuarios y Login"])
 
 
 def _get_superadmin_by_token(raw_auth: str | None):

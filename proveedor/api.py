@@ -1,6 +1,7 @@
 from ninja import Router
 from proveedor.models import Proveedor
 from proveedor.schemas import ProveedorSchema, ProveedorInSchema, ProveedorUpdateSchema
+from usuario.permisions import require_manage_providers, _get_user_from_request, get_allowed_tiendas
 from core.schemas import ErrorSchema
 from tienda.models import Tienda
 from ninja.errors import HttpError
@@ -11,10 +12,16 @@ def listar_proveedores(request, tienda_id: int):
     """
     Lista todos los proveedores de una tienda específica.
     """
+    # Filtrar por tiendas permitidas del usuario
+    user = _get_user_from_request(request)
+    allowed = get_allowed_tiendas(user)
+    if allowed is not None and tienda_id not in allowed:
+        return []
     proveedores = Proveedor.objects.filter(tienda_id=tienda_id)
     return proveedores
 
 @proveedor_router.post("/crear/", response={200: ProveedorSchema, 400: ErrorSchema})
+@require_manage_providers()
 def crear_proveedor(request, proveedor_in: ProveedorInSchema):
     """
     Crea un nuevo proveedor asociado a una tienda.
@@ -31,6 +38,7 @@ def crear_proveedor(request, proveedor_in: ProveedorInSchema):
     return proveedor
 
 @proveedor_router.patch("/actualizar/{proveedor_id}/", response=ProveedorSchema)
+@require_manage_providers()
 def actualizar_proveedor(request, proveedor_id: int, proveedor_in: ProveedorUpdateSchema):
     """
     Actualiza un proveedor existente.
@@ -42,6 +50,7 @@ def actualizar_proveedor(request, proveedor_id: int, proveedor_in: ProveedorUpda
     return proveedor
 
 @proveedor_router.delete("/eliminar/{proveedor_id}/")
+@require_manage_providers()
 def eliminar_proveedor(request, proveedor_id: int):
     """
     Elimina un proveedor existente.

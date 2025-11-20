@@ -1,4 +1,5 @@
 from ninja import Router
+from usuario.permisions import require_manage_purchases, _get_user_from_request, get_allowed_tiendas,require_edit_purchases
 from compra.schemas import (
     CompraSchema,
     CompraInSchema,
@@ -58,6 +59,13 @@ def compras_por_rango(
     if not Proveedor.objects.filter(id=proveedor_id).exists():
         return 404, {"message": "Proveedor no encontrado"}
 
+    # Verificar acceso del usuario a la tienda de ese proveedor (GETs libres pero filtradas)
+    user = _get_user_from_request(request)
+    allowed = get_allowed_tiendas(user)
+    proveedor_obj = Proveedor.objects.get(id=proveedor_id)
+    if allowed is not None and proveedor_obj.tienda_id not in allowed:
+        return []
+
     # Filtrar por proveedor recibido en la ruta
     qs = Compra.objects.filter(proveedor__id=proveedor_id)
     if fecha_inicio and fecha_fin:
@@ -75,6 +83,7 @@ def compras_por_rango(
 
 
 @compra_router.post("/crear/", response={200: CompraWithDetailsSchema, 400: ErrorSchema})
+@require_manage_purchases()
 def crear_compra(request, compra_in: CompraInSchema):
     """Crea una nueva compra y genera un detalle por cada producto del proveedor con valores en 0."""
     # Validación: no permitir más de una compra en la misma fecha para el mismo proveedor
@@ -105,7 +114,9 @@ def crear_compra(request, compra_in: CompraInSchema):
     )
     return compra_con_detalles
 
+
 @compra_router.post("/detalle/crear/{compra_id}/", response={200: DetalleCompraSchema, 400: ErrorSchema})
+@require_manage_purchases()
 def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
     """Crea un nuevo detalle de compra para una compra existente."""
     compra = Compra.objects.get(id=compra_id)
@@ -120,6 +131,7 @@ def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
 
 
 @compra_router.patch("/detalle/editar/{detalle_id}/", response={200: DetalleCompraSchema, 400: ErrorSchema})
+@require_edit_purchases()
 def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSchema):
     """Edita un detalle de compra existente."""
     detalle = DetalleCompra.objects.select_related("producto").get(id=detalle_id)
@@ -130,6 +142,7 @@ def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSche
     return DetalleCompra.objects.select_related("producto").get(id=detalle.id)
 
 @compra_router.patch("/compra//{compra}/", response=CompraSchema)
+@require_manage_purchases()
 def actualizar_compra(request, compra: int, compra_in: CompraUpdateSchema):
     """Actualiza una compra existente."""
     compra_obj = Compra.objects.get(id=compra)
@@ -139,6 +152,7 @@ def actualizar_compra(request, compra: int, compra_in: CompraUpdateSchema):
     return compra_obj
 
 @compra_router.delete("/detalle/eliminar/{detalle_id}/")
+@require_manage_purchases()
 def eliminar_detalle(request, detalle_id: int):
     """Elimina un detalle de compra existente."""
     detalle = DetalleCompra.objects.get(id=detalle_id)
@@ -147,6 +161,7 @@ def eliminar_detalle(request, detalle_id: int):
 
 
 @compra_router.delete("/eliminar/{compra_id}/")
+@require_manage_purchases()
 def eliminar_compra(request, compra_id: int):
     """Elimina una compra (y sus detalles por cascade)."""
     compra = Compra.objects.get(id=compra_id)

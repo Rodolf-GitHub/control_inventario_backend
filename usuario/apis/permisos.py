@@ -10,7 +10,7 @@ from usuario.schemas.permisosSchema import (
 )
 from core.schemas import ErrorSchema
 
-permisos_router = Router()
+permisos_router = Router(tags=["Permisos Usuario-Tienda"])
 
 
 def _get_superadmin_by_token(raw_auth: str | None):
@@ -59,6 +59,7 @@ def crear_permiso(request: HttpRequest, payload: PermisosUsuarioTiendaInSchema, 
 		puede_gestionar_proveedores=payload.puede_gestionar_proveedores,
 		puede_gestionar_productos=payload.puede_gestionar_productos,
 		puede_gestionar_compras=payload.puede_gestionar_compras,
+		puede_editar_compras=payload.puede_editar_compras,
 		puede_ver_inventario_compras=payload.puede_ver_inventario_compras,
 	)
 
@@ -78,6 +79,7 @@ def actualizar_permiso(request: HttpRequest, permiso_id: int, payload: PermisosU
 	permiso.puede_gestionar_proveedores = payload.puede_gestionar_proveedores
 	permiso.puede_gestionar_productos = payload.puede_gestionar_productos
 	permiso.puede_gestionar_compras = payload.puede_gestionar_compras
+	permiso.puede_editar_compras = payload.puede_editar_compras
 	permiso.puede_ver_inventario_compras = payload.puede_ver_inventario_compras
 	permiso.save()
 	return permiso
