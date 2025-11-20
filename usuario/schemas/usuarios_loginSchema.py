@@ -1,0 +1,32 @@
+from ninja import Schema,ModelSchema
+from usuario.models import Usuario, PermisosUsuarioTienda
+from typing import Optional
+from .permisosSchema import PermisosUsuarioTiendaSchema
+
+
+class UserCreateSchema(Schema):
+	username: str
+	password: str
+	es_superusuario: bool = False
+
+class ChangePasswordSchema(Schema):
+    old_password: str
+    new_password: str
+
+class SuperUserResetPasswordSchema(Schema):
+    new_password: str
+
+
+class LoginSchema(Schema):
+	username: str
+	password: str
+
+
+class TokenSchema(Schema):
+	token: str
+	
+class UserOutSchema(ModelSchema):
+    permisos: Optional[list[PermisosUsuarioTiendaSchema]] = None
+    class Meta:
+        model = Usuario
+        exclude = ['password', 'token']
