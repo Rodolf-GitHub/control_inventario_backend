@@ -66,8 +66,19 @@ def _extract_tienda_id(request: HttpRequest, kwargs: dict, tienda_kw: str = "tie
 	try:
 		if request.body:
 			data = json.loads(request.body)
-			if isinstance(data, dict) and tienda_kw in data:
-				return int(data[tienda_kw])
+			if isinstance(data, dict):
+				# Si el cliente incluye directamente el 'tienda_id' en el body
+				if tienda_kw in data:
+					return int(data[tienda_kw])
+				# Si el cliente pasó un 'proveedor_id' en el body, intentar derivar la tienda
+				if 'proveedor_id' in data:
+					try:
+						from proveedor.models import Proveedor as _ProveedorModel
+						prov = _ProveedorModel.objects.filter(id=int(data.get('proveedor_id'))).first()
+						if prov:
+							return prov.tienda_id
+					except Exception:
+						pass
 	except Exception:
 		pass
 	# 4) intentar derivar tienda a partir de identificadores relacionados (detalle, compra, proveedor)
