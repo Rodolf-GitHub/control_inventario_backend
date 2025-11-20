@@ -22,8 +22,11 @@ class LoginSchema(Schema):
 	password: str
 
 
-class TokenSchema(Schema):
-	token: str
+class TokenSchema(ModelSchema):
+    permisos: Optional[list[PermisosUsuarioTiendaSchema]] = None
+    class Meta:
+        model = Usuario
+        exclude = ['password']
 	
 class UserOutSchema(ModelSchema):
     permisos: Optional[list[PermisosUsuarioTiendaSchema]] = None

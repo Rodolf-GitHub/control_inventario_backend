@@ -8,6 +8,7 @@ class PermisosUsuarioTiendaSchema(ModelSchema):
         fields = '__all__'
 
 class PermisosUsuarioTiendaInSchema(Schema):
+    usuario_id: int
     tienda_id: int
     puede_gestionar_proveedores: bool = True
     puede_gestionar_productos: bool = True

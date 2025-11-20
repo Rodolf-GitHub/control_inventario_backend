@@ -1,4 +1,4 @@
-from ninja import Router, Header
+from ninja import Router
 from django.http import HttpRequest
 
 from usuario.models import Usuario, PermisosUsuarioTienda
@@ -9,52 +9,44 @@ from usuario.schemas.permisosSchema import (
 	PermisosUsuarioTiendaUpdateSchema,
 )
 from core.schemas import ErrorSchema
+from usuario.permisions import require_superadmin
 
 permisos_router = Router(tags=["Permisos Usuario-Tienda"])
 
 
-def _get_superadmin_by_token(raw_auth: str | None):
-	if not raw_auth:
-		return None
-	token = raw_auth.strip()
-	if token.lower().startswith("token "):
-		token = token.split(" ", 1)[1].strip()
-	return Usuario.objects.filter(token=token, es_superusuario=True).first()
-
-
 @permisos_router.get("/usuario/{usuario_id}/", response={200: list[PermisosUsuarioTiendaSchema], 401: ErrorSchema})
-def listar_permisos(request: HttpRequest, usuario_id: int, authorization: str | None = Header(None)):
-	admin = _get_superadmin_by_token(authorization)
-	if not admin:
-		return 401, {"message": "Token de superadmin inválido o no proporcionado"}
-
+@require_superadmin()
+def listar_permisos(request: HttpRequest, usuario_id: int):
 	permisos = PermisosUsuarioTienda.objects.filter(usuario_id=usuario_id)
 	return list(permisos)
 
 
-@permisos_router.post("/", response={200: PermisosUsuarioTiendaSchema, 400: ErrorSchema, 401: ErrorSchema})
-def crear_permiso(request: HttpRequest, payload: PermisosUsuarioTiendaInSchema, authorization: str | None = Header(None)):
-	admin = _get_superadmin_by_token(authorization)
-	if not admin:
-		return 401, {"message": "Token de superadmin inválido o no proporcionado"}
+@permisos_router.post("crear/", response={200: PermisosUsuarioTiendaSchema, 400: ErrorSchema, 401: ErrorSchema, 403: ErrorSchema})
+@require_superadmin()
+def crear_permiso(request: HttpRequest, payload: PermisosUsuarioTiendaInSchema):
+	# Obtener usuario_id desde el payload (convención esperada).
+	usuario_id = getattr(payload, "usuario_id", None)
 
-	if not Usuario.objects.filter(id=request.json().get('usuario_id')):
-		# el usuario se pasa por payload.usuario_id en la convención anterior; algunos clientes lo pasarán en body
-		pass
+	# Si por alguna razón no se envió usuario_id, devolver 400 para indicar payload inválido
+	if not usuario_id:
+		return 400, {"message": "Incluye 'usuario_id' en el payload"}
 
-	if not Usuario.objects.filter(id=payload.__dict__.get('usuario_id')):
-		# si no existe, retornamos error
-		return 400, {"message": "Usuario no encontrado. Incluye 'usuario_id' en el payload"}
+	if not Usuario.objects.filter(id=usuario_id).exists():
+		return 400, {"message": "Usuario no encontrado"}
 
 	if not Tienda.objects.filter(id=payload.tienda_id).exists():
 		return 400, {"message": "Tienda no encontrada"}
 
+	# No permitir crear permisos para superusuarios
+	if Usuario.objects.filter(id=usuario_id, es_superusuario=True).exists():
+		return 403, {"message": "No se pueden asignar permisos a un superusuario"}
+
 	# evitar duplicados según constraint
-	if PermisosUsuarioTienda.objects.filter(usuario_id=payload.__dict__.get('usuario_id'), tienda_id=payload.tienda_id).exists():
+	if PermisosUsuarioTienda.objects.filter(usuario_id=usuario_id, tienda_id=payload.tienda_id).exists():
 		return 400, {"message": "Ya existen permisos para ese usuario en la tienda indicada"}
 
 	permiso = PermisosUsuarioTienda.objects.create(
-		usuario_id=payload.__dict__.get('usuario_id'),
+		usuario_id=usuario_id,
 		tienda_id=payload.tienda_id,
 		puede_gestionar_proveedores=payload.puede_gestionar_proveedores,
 		puede_gestionar_productos=payload.puede_gestionar_productos,
@@ -66,11 +58,9 @@ def crear_permiso(request: HttpRequest, payload: PermisosUsuarioTiendaInSchema, 
 	return permiso
 
 
-@permisos_router.put("/{permiso_id}/", response={200: PermisosUsuarioTiendaSchema, 401: ErrorSchema, 404: ErrorSchema})
-def actualizar_permiso(request: HttpRequest, permiso_id: int, payload: PermisosUsuarioTiendaUpdateSchema, authorization: str | None = Header(None)):
-	admin = _get_superadmin_by_token(authorization)
-	if not admin:
-		return 401, {"message": "Token de superadmin inválido o no proporcionado"}
+@permisos_router.put("actualizar/{permiso_id}/", response={200: PermisosUsuarioTiendaSchema, 401: ErrorSchema, 404: ErrorSchema})
+@require_superadmin()
+def actualizar_permiso(request: HttpRequest, permiso_id: int, payload: PermisosUsuarioTiendaUpdateSchema):
 
 	permiso = PermisosUsuarioTienda.objects.filter(id=permiso_id).first()
 	if not permiso:
@@ -85,11 +75,9 @@ def actualizar_permiso(request: HttpRequest, permiso_id: int, payload: PermisosU
 	return permiso
 
 
-@permisos_router.delete("/{permiso_id}/", response={200: dict, 401: ErrorSchema, 404: ErrorSchema})
-def eliminar_permiso(request: HttpRequest, permiso_id: int, authorization: str | None = Header(None)):
-	admin = _get_superadmin_by_token(authorization)
-	if not admin:
-		return 401, {"message": "Token de superadmin inválido o no proporcionado"}
+@permisos_router.delete("eliminar/{permiso_id}/", response={200: dict, 401: ErrorSchema, 404: ErrorSchema})
+@require_superadmin()
+def eliminar_permiso(request: HttpRequest, permiso_id: int):
 
 	permiso = PermisosUsuarioTienda.objects.filter(id=permiso_id).first()
 	if not permiso:

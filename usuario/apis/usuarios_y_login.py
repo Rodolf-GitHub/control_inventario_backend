@@ -1,4 +1,4 @@
-from ninja import Router, Header
+from ninja import Router
 from django.contrib.auth.hashers import check_password, make_password
 from django.http import HttpRequest
 import uuid
@@ -17,22 +17,24 @@ from core.schemas import ErrorSchema
 usuario_router = Router(tags=["Usuarios y Login"])
 
 
-def _get_superadmin_by_token(raw_auth: str | None):
-	if not raw_auth:
+def _get_superadmin_from_request(request):
+	user = getattr(request, "auth", None)
+	if not user:
 		return None
-	token = raw_auth.strip()
-	if token.lower().startswith("token "):
-		token = token.split(" ", 1)[1].strip()
-	return Usuario.objects.filter(token=token, es_superusuario=True).first()
+	return user if getattr(user, "es_superusuario", False) else None
 
 
-def _get_user_by_token(raw_auth: str | None):
-	if not raw_auth:
-		return None
-	token = raw_auth.strip()
-	if token.lower().startswith("token "):
-		token = token.split(" ", 1)[1].strip()
-	return Usuario.objects.filter(token=token).first()
+def _get_user_from_request(request):
+	return getattr(request, "auth", None)
+
+@usuario_router.get('/listar/', response={200: list[UserOutSchema], 401: ErrorSchema})
+def listar_usuarios(request: HttpRequest):
+	admin = _get_superadmin_from_request(request)
+	if not admin:
+		return 401, {"message": "Se requiere superadmin"}
+
+	usuarios = Usuario.objects.all()
+	return list(usuarios)
 
 
 @usuario_router.post("/login/", response={200: TokenSchema, 400: ErrorSchema},auth=None)
@@ -43,14 +45,15 @@ def login(request: HttpRequest, payload: LoginSchema):
 	token = uuid.uuid4().hex
 	user.token = token
 	user.save(update_fields=["token"])
-	return {"token": token}
+	# Devolver la instancia ORM para que el `TokenSchema` (ModelSchema) la serialice correctamente
+	return user
 
 
 @usuario_router.post("/crear/", response={200: UserOutSchema, 401: ErrorSchema, 400: ErrorSchema})
-def crear_usuario(request: HttpRequest, payload: UserCreateSchema, authorization: str | None = Header(None)):
-	admin = _get_superadmin_by_token(authorization)
+def crear_usuario(request: HttpRequest, payload: UserCreateSchema):
+	admin = _get_superadmin_from_request(request)
 	if not admin:
-		return 401, {"message": "Token de superadmin inválido o no proporcionado"}
+		return 401, {"message": "Se requiere superadmin"}
 
 	if Usuario.objects.filter(username=payload.username).exists():
 		return 400, {"message": "El nombre de usuario ya existe"}
@@ -68,8 +71,8 @@ def crear_usuario(request: HttpRequest, payload: UserCreateSchema, authorization
 
 
 @usuario_router.put("/password/change/", response={200: dict, 401: ErrorSchema, 400: ErrorSchema})
-def change_password(request: HttpRequest, payload: ChangePasswordSchema, authorization: str | None = Header(None)):
-	user = _get_user_by_token(authorization)
+def change_password(request: HttpRequest, payload: ChangePasswordSchema):
+	user = _get_user_from_request(request)
 	if not user:
 		return 401, {"message": "Token inválido o no proporcionado"}
 
@@ -82,10 +85,10 @@ def change_password(request: HttpRequest, payload: ChangePasswordSchema, authori
 
 
 @usuario_router.post("/password/reset/{usuario_id}/", response={200: dict, 401: ErrorSchema, 404: ErrorSchema})
-def super_reset_password(request: HttpRequest, usuario_id: int, payload: SuperUserResetPasswordSchema, authorization: str | None = Header(None)):
-	admin = _get_superadmin_by_token(authorization)
+def super_reset_password(request: HttpRequest, usuario_id: int, payload: SuperUserResetPasswordSchema):
+	admin = _get_superadmin_from_request(request)
 	if not admin:
-		return 401, {"message": "Token de superadmin inválido o no proporcionado"}
+		return 401, {"message": "Se requiere superadmin"}
 
 	usuario = Usuario.objects.filter(id=usuario_id).first()
 	if not usuario:
@@ -97,8 +100,8 @@ def super_reset_password(request: HttpRequest, usuario_id: int, payload: SuperUs
 
 
 @usuario_router.post("/logout/", response={200: dict, 401: ErrorSchema})
-def logout(request: HttpRequest, authorization: str | None = Header(None)):
-	user = _get_user_by_token(authorization)
+def logout(request: HttpRequest):
+	user = _get_user_from_request(request)
 	if not user:
 		return 401, {"message": "Token inválido o no proporcionado"}
 
@@ -106,3 +109,18 @@ def logout(request: HttpRequest, authorization: str | None = Header(None)):
 	user.save(update_fields=["token"])
 	return {"message": "Logout correcto"}
 
+@usuario_router.delete("/eliminar/{usuario_id}/", response={200: dict, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema})
+def eliminar_usuario(request: HttpRequest, usuario_id: int):
+	admin = _get_superadmin_from_request(request)
+	if not admin:
+		return 401, {"message": "Se requiere superadmin"}
+
+	usuario = Usuario.objects.filter(id=usuario_id).first()
+	if not usuario:
+		return 404, {"message": "Usuario no encontrado"}
+
+	if getattr(usuario, "es_superusuario", False):
+		return 403, {"message": "No se puede eliminar un superusuario"}
+
+	usuario.delete()
+	return {"message": "Usuario eliminado correctamente"}

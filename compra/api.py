@@ -1,5 +1,5 @@
 from ninja import Router
-from usuario.permisions import require_manage_purchases, _get_user_from_request, get_allowed_tiendas,require_edit_purchases
+from usuario.permisions import require_manage_purchases, _get_user_from_request, get_allowed_tiendas, require_edit_purchases, has_permission
 from compra.schemas import (
     CompraSchema,
     CompraInSchema,
@@ -21,23 +21,47 @@ from ninja.errors import HttpError
 compra_router = Router(tags=["Compras"])
 
 
-def _detalle_to_dict(detalle: DetalleCompra) -> dict:
+def _detalle_to_dict(detalle: DetalleCompra, request) -> dict:
+    # Decidir visibilidad de inventario a partir del request y la tienda asociada
+    tienda_id = None
+    try:
+        tienda_id = detalle.compra.proveedor.tienda_id
+    except Exception:
+        tienda_id = detalle.compra.proveedor.tienda_id if hasattr(detalle, 'compra') and hasattr(detalle.compra, 'proveedor') else None
+    show_inventario = False
+    user = _get_user_from_request(request)
+    if tienda_id is not None:
+        show_inventario = has_permission(user, tienda_id, "puede_ver_inventario_compras")
+    # Resolver nombre de producto robustamente (en caso de que no esté cargado por select_related)
+    producto_nombre = None
+    try:
+        producto_nombre = detalle.producto.nombre if getattr(detalle, 'producto', None) else None
+    except Exception:
+        producto_nombre = None
+    if not producto_nombre:
+        try:
+            producto_obj = Producto.objects.get(id=detalle.producto_id)
+            producto_nombre = getattr(producto_obj, 'nombre', None)
+        except Exception:
+            producto_nombre = None
+
     return {
         "id": detalle.id,
         "compra_id": detalle.compra_id,
         "producto_id": detalle.producto_id,
         "cantidad": detalle.cantidad,
-        "inventario_anterior": detalle.inventario_anterior,
-        "producto_nombre": detalle.producto.nombre if detalle.producto else None,
+            # si no puede ver inventario, devolver el marcador '?'
+            "inventario_anterior": detalle.inventario_anterior if show_inventario else "?",
+        "producto_nombre": producto_nombre,
     }
 
 
-def _compra_to_dict(compra: Compra, detalles_list: list[DetalleCompra]) -> dict:
+def _compra_to_dict(compra: Compra, detalles_list: list[DetalleCompra], request) -> dict:
     return {
         "id": compra.id,
         "proveedor_id": compra.proveedor_id,
         "fecha_compra": compra.fecha_compra,
-        "detalles": [_detalle_to_dict(d) for d in detalles_list],
+        "detalles": [_detalle_to_dict(d, request) for d in detalles_list],
     }
 
 @compra_router.get("/rango/{proveedor_id}/", response={200: list[CompraWithDetailsSchema], 400: ErrorSchema, 404: ErrorSchema})
@@ -78,11 +102,13 @@ def compras_por_rango(
 
     ordering = "fecha_compra" if (str(order).lower() != "desc") else "-fecha_compra"
     compras = list(qs.order_by(ordering)[:limit])
-    return compras
+    # convertir a dicts: la visibilidad del inventario se decidirá dentro de los helpers con el request
+    result = [_compra_to_dict(c, list(c.detalles.all()), request) for c in compras]
+    return result
 
 
 
-@compra_router.post("/crear/", response={200: CompraWithDetailsSchema, 400: ErrorSchema})
+@compra_router.post("/crear/", response={200: CompraWithDetailsSchema, 400: ErrorSchema, 401: ErrorSchema, 403: ErrorSchema})
 @require_manage_purchases()
 def crear_compra(request, compra_in: CompraInSchema):
     """Crea una nueva compra y genera un detalle por cada producto del proveedor con valores en 0."""
@@ -112,10 +138,10 @@ def crear_compra(request, compra_in: CompraInSchema):
             Prefetch("detalles", queryset=DetalleCompra.objects.select_related("producto"))
         ).get(id=compra.id)
     )
-    return compra_con_detalles
+    return _compra_to_dict(compra_con_detalles, list(compra_con_detalles.detalles.all()), request)
 
 
-@compra_router.post("/detalle/crear/{compra_id}/", response={200: DetalleCompraSchema, 400: ErrorSchema})
+@compra_router.post("/detalle/crear/{compra_id}/", response={200: DetalleCompraSchema, 400: ErrorSchema, 401: ErrorSchema, 403: ErrorSchema})
 @require_manage_purchases()
 def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
     """Crea un nuevo detalle de compra para una compra existente."""
@@ -127,21 +153,42 @@ def crear_detalle(request, compra_id: int, detalle_in: DetalleCompraInSchema):
         cantidad=detalle_in.cantidad,
         inventario_anterior=detalle_in.inventario_anterior,
     )
-    return DetalleCompra.objects.select_related("producto").get(id=detalle.id)
+    detalle_obj = DetalleCompra.objects.select_related("producto", "compra__proveedor").get(id=detalle.id)
+    return _detalle_to_dict(detalle_obj, request)
 
 
-@compra_router.patch("/detalle/editar/{detalle_id}/", response={200: DetalleCompraSchema, 400: ErrorSchema})
+@compra_router.patch("/detalle/editar/{detalle_id}/", response={200: DetalleCompraSchema, 400: ErrorSchema, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema})
 @require_edit_purchases()
 def editar_detalle(request, detalle_id: int, detalle_in: DetalleCompraUpdateSchema):
     """Edita un detalle de compra existente."""
-    detalle = DetalleCompra.objects.select_related("producto").get(id=detalle_id)
-    # Actualizar solo los campos permitidos
-    detalle.cantidad = detalle_in.cantidad
-    detalle.inventario_anterior = detalle_in.inventario_anterior
-    detalle.save()
-    return DetalleCompra.objects.select_related("producto").get(id=detalle.id)
+    detalle = DetalleCompra.objects.select_related("producto", "compra__proveedor").get(id=detalle_id)
+    # Aplicar sólo los campos realmente presentes en el JSON del request (PATCH parcial)
+    import json
+    try:
+        body_data = json.loads(request.body) if request.body else {}
+    except Exception:
+        body_data = {}
 
-@compra_router.patch("/compra//{compra}/", response=CompraSchema)
+    updated = False
+    # Si el cliente envió 'cantidad' lo aplicamos sin validaciones específicas
+    if "cantidad" in body_data:
+        detalle.cantidad = body_data.get("cantidad")
+        updated = True
+
+    # Si el cliente envió 'inventario_anterior' lo aplicamos sin validaciones específicas
+    if "inventario_anterior" in body_data:
+        detalle.inventario_anterior = body_data.get("inventario_anterior")
+        updated = True
+
+    if updated:
+        try:
+            detalle.save()
+        except Exception:
+            return 400, {"message": "Error al actualizar detalle"}
+    detalle_obj = DetalleCompra.objects.select_related("producto", "compra__proveedor").get(id=detalle.id)
+    return _detalle_to_dict(detalle_obj, request)
+
+@compra_router.patch("/compra/{compra}/", response={200: CompraSchema, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema})
 @require_manage_purchases()
 def actualizar_compra(request, compra: int, compra_in: CompraUpdateSchema):
     """Actualiza una compra existente."""
@@ -151,7 +198,7 @@ def actualizar_compra(request, compra: int, compra_in: CompraUpdateSchema):
     compra_obj.save()
     return compra_obj
 
-@compra_router.delete("/detalle/eliminar/{detalle_id}/")
+@compra_router.delete("/detalle/eliminar/{detalle_id}/", response={200: dict, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema})
 @require_manage_purchases()
 def eliminar_detalle(request, detalle_id: int):
     """Elimina un detalle de compra existente."""
@@ -160,7 +207,7 @@ def eliminar_detalle(request, detalle_id: int):
     return {"mensaje": "Detalle de compra eliminado correctamente."}
 
 
-@compra_router.delete("/eliminar/{compra_id}/")
+@compra_router.delete("/eliminar/{compra_id}/", response={200: dict, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema})
 @require_manage_purchases()
 def eliminar_compra(request, compra_id: int):
     """Elimina una compra (y sus detalles por cascade)."""

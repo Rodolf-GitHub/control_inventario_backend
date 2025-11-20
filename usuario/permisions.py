@@ -70,6 +70,39 @@ def _extract_tienda_id(request: HttpRequest, kwargs: dict, tienda_kw: str = "tie
 				return int(data[tienda_kw])
 	except Exception:
 		pass
+	# 4) intentar derivar tienda a partir de identificadores relacionados (detalle, compra, proveedor)
+	try:
+		# Importar modelos localmente para evitar ciclos en importaciones
+		from compra.models import DetalleCompra
+		from compra.models import Compra
+		from proveedor.models import Proveedor
+
+		# Si nos pasan detalle_id podemos obtener la compra -> proveedor -> tienda
+		if "detalle_id" in kwargs:
+			try:
+				detalle = DetalleCompra.objects.select_related("compra__proveedor").get(id=kwargs.get("detalle_id"))
+				return detalle.compra.proveedor.tienda_id
+			except Exception:
+				pass
+
+		# Si nos pasan compra_id
+		if "compra_id" in kwargs:
+			try:
+				compra = Compra.objects.select_related("proveedor").get(id=kwargs.get("compra_id"))
+				return compra.proveedor.tienda_id
+			except Exception:
+				pass
+
+		# Si nos pasan proveedor_id
+		if "proveedor_id" in kwargs:
+			try:
+				prov = Proveedor.objects.get(id=kwargs.get("proveedor_id"))
+				return prov.tienda_id
+			except Exception:
+				pass
+	except Exception:
+		# Si no se pueden importar los modelos o falla, retornamos None
+		pass
 	return None
 
 

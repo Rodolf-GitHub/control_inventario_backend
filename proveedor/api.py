@@ -20,7 +20,7 @@ def listar_proveedores(request, tienda_id: int):
     proveedores = Proveedor.objects.filter(tienda_id=tienda_id)
     return proveedores
 
-@proveedor_router.post("/crear/", response={200: ProveedorSchema, 400: ErrorSchema})
+@proveedor_router.post("/crear/", response={200: ProveedorSchema, 400: ErrorSchema, 401: ErrorSchema, 403: ErrorSchema})
 @require_manage_providers()
 def crear_proveedor(request, proveedor_in: ProveedorInSchema):
     """
@@ -37,7 +37,7 @@ def crear_proveedor(request, proveedor_in: ProveedorInSchema):
     )
     return proveedor
 
-@proveedor_router.patch("/actualizar/{proveedor_id}/", response=ProveedorSchema)
+@proveedor_router.patch("/actualizar/{proveedor_id}/", response={200: ProveedorSchema, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema})
 @require_manage_providers()
 def actualizar_proveedor(request, proveedor_id: int, proveedor_in: ProveedorUpdateSchema):
     """
@@ -49,7 +49,7 @@ def actualizar_proveedor(request, proveedor_id: int, proveedor_in: ProveedorUpda
     proveedor.save()
     return proveedor
 
-@proveedor_router.delete("/eliminar/{proveedor_id}/")
+@proveedor_router.delete("/eliminar/{proveedor_id}/", response={200: dict, 401: ErrorSchema, 403: ErrorSchema, 404: ErrorSchema})
 @require_manage_providers()
 def eliminar_proveedor(request, proveedor_id: int):
     """

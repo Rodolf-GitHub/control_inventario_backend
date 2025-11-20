@@ -6,6 +6,11 @@ class Usuario(models.Model):
     password = models.CharField(max_length=128)
     token = models.CharField(max_length=255, blank=True, null=True)
     es_superusuario = models.BooleanField(default=False)
+    
+    @property
+    def permisos(self):
+        # Devuelve el queryset de permisos relacionados para que los ModelSchema los pueda serializar
+        return PermisosUsuarioTienda.objects.filter(usuario=self)
     class Meta:
         db_table = 'usuario'
 
