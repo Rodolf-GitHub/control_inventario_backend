@@ -10,11 +10,11 @@ class ProductoSchema(ModelSchema):
 class ProductoInSchema(Schema):
     nombre: str
     proveedor_id: int
-    orden: Optional[int] = 999
+    
 
 class ProductoUpdateSchema(Schema):
     nombre: str
-    orden: Optional[int] = None
+    
 
 class MoverProductoSchema(Schema):
     producto_id: int
