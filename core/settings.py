@@ -109,9 +109,10 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-uy'
 
-TIME_ZONE = 'UTC'
+# Usar la zona horaria de Uruguay (Montevideo)
+TIME_ZONE = 'America/Montevideo'
 
 USE_I18N = True
 
