@@ -87,6 +87,7 @@ def _extract_tienda_id(request: HttpRequest, kwargs: dict, tienda_kw: str = "tie
 		from compra.models import DetalleCompra
 		from compra.models import Compra
 		from proveedor.models import Proveedor
+		from producto.models import Producto
 
 		# Si nos pasan detalle_id podemos obtener la compra -> proveedor -> tienda
 		if "detalle_id" in kwargs:
@@ -109,6 +110,14 @@ def _extract_tienda_id(request: HttpRequest, kwargs: dict, tienda_kw: str = "tie
 			try:
 				prov = Proveedor.objects.get(id=kwargs.get("proveedor_id"))
 				return prov.tienda_id
+			except Exception:
+				pass
+
+		# Si nos pasan producto_id (derivar via Producto -> Proveedor -> tienda)
+		if "producto_id" in kwargs:
+			try:
+				prod = Producto.objects.select_related("proveedor").get(id=kwargs.get("producto_id"))
+				return prod.proveedor.tienda_id
 			except Exception:
 				pass
 	except Exception:

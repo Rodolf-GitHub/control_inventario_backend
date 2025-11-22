@@ -101,8 +101,9 @@ def compras_por_rango(
         qs = qs.filter(fecha_compra__range=(fecha_inicio, fecha_fin))
 
     # Prefetch detalles con su producto para que el ModelSchema pueda resolver producto.nombre
+    # y ordenar los detalles según el `orden` del producto
     qs = qs.prefetch_related(
-        Prefetch("detalles", queryset=DetalleCompra.objects.select_related("producto"))
+        Prefetch("detalles", queryset=DetalleCompra.objects.select_related("producto").order_by("producto__orden"))
     )
 
     ordering = "fecha_compra" if (str(order).lower() != "desc") else "-fecha_compra"
@@ -125,7 +126,8 @@ def crear_compra(request, compra_in: CompraInSchema):
 
     # Obtener el proveedor de la compra y filtrar productos por esa instancia
     proveedor_obj = compra.proveedor
-    productos = Producto.objects.filter(proveedor=proveedor_obj)
+    # asegurar orden por `orden` del producto al crear detalles
+    productos = Producto.objects.filter(proveedor=proveedor_obj).order_by("orden")
     detalles_creados = []
     for producto in productos:
         cantidad_compra = 0
@@ -140,7 +142,7 @@ def crear_compra(request, compra_in: CompraInSchema):
     # Devolver la instancia ORM con los detalles precargados para que el schema pueda resolver nombres
     compra_con_detalles = (
         Compra.objects.prefetch_related(
-            Prefetch("detalles", queryset=DetalleCompra.objects.select_related("producto"))
+            Prefetch("detalles", queryset=DetalleCompra.objects.select_related("producto").order_by("producto__orden"))
         ).get(id=compra.id)
     )
     return _compra_to_dict(compra_con_detalles, list(compra_con_detalles.detalles.all()), request)
